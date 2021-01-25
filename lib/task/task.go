@@ -2,9 +2,10 @@ package task
 
 import (
 	"context"
-	// "fmt"
+	"net"
+	// "github.com/eavesmy/golang-lib/crypto"
+	"encoding/json"
 	"github.com/eavesmy/mongo_monitor/lib/db"
-	"github.com/robertkrimen/otto"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -14,23 +15,56 @@ import (
 type Subscribe struct {
 	Name   string
 	Cancel context.CancelFunc
-	Script string
+	Stream *mongo.ChangeStream
+	Ctx    context.Context
+	Conn   net.Conn
 }
 
-type Task struct {
-	db        *mongo.Client
-	Subscribe map[string]*Subscribe
+type SubscribeReq struct {
+	DB         string `json:"db"`
+	Collection string `json:"collection"`
+	Match      bson.D `json:"match"`
+
+	// match := bson.D{{"operationType", "update"}, {"updateDescription.updatedFields.cash", bson.D{{"$exists", true}}}}
 }
 
-func NewTask(uri string) *Task {
-	return &Task{db: db.NewClient(uri), Subscribe: map[string]*Subscribe{}}
-}
+func NewSub(req *SubscribeReq) *Subscribe {
+	// 获取 db
 
-// 传入参数
-func (t *Task) Sub() {
+	_db := db.Register(req.DB, req.Collection)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	sub := &Subscribe{Cancel: cancel, Name: "test", Script: "console.log(result); console.log(JSON.stringify(result))"}
+
+	sub := &Subscribe{Cancel: cancel, Ctx: ctx}
+
+	stream, err := _db.Watch(ctx, mongo.Pipeline{bson.D{{"$match", req.Match}}}, options.ChangeStream().SetFullDocument(options.UpdateLookup))
+
+	if err != nil {
+		return nil
+	}
+
+	sub.Stream = stream
+
+	return sub
+}
+
+func (s *Subscribe) Listen() {
+	for s.Stream.Next(context.Background()) {
+		// 直接返回结果，交给 对应 task 处理
+		b, _ := bson.Marshal(s.Stream.Current)
+		m := map[string]interface{}{}
+		bson.Unmarshal(b, &m)
+		r, _ := json.Marshal(m)
+		s.Conn.Write(r)
+	}
+}
+
+/*
+// 传入参数
+func (t *Task) Sub(req *SubscribeReq) {
+
+	ctx, cancel := context.WithCancel(context.Background())
+	sub := &Subscribe{Cancel: cancel, Name: "test"}
 
 	t.Subscribe[sub.Name] = sub
 
@@ -40,29 +74,19 @@ func (t *Task) Sub() {
 		panic(err)
 	}
 
-	match := bson.D{{"$match", bson.D{{"operationType", "update"}, {"updateDescription.updatedFields.cash", bson.D{{"$exists", true}}}}}}
-
-	stream, err := t.db.Database("test").Collection("a").Watch(context.Background(), mongo.Pipeline{match}, options.ChangeStream().SetFullDocument(options.Default))
+	stream, err := t.db.Database("test").Collection("a").Watch(context.Background(), mongo.Pipeline{bson.D{{"$match", req.Match}}}, options.ChangeStream().SetFullDocument(options.UpdateLookup))
 
 	if err != nil {
 		panic(err)
 	}
 
-	for stream.Next(context.Background()) {
-		// 直接返回结果，交给 对应 task 处理
+	sub.Stream = *stream
 
-		go func() {
-			b, _ := bson.Marshal(stream.Current)
-			m := map[string]interface{}{}
-			bson.Unmarshal(b, &m)
-
-			vm := otto.New()
-			vm.Set("result", m)
-			vm.Run(sub.Script)
-		}()
-	}
+	go sub.Listen()
 }
 
 func (t *Task) UnSub() {
 
 }
+
+*/

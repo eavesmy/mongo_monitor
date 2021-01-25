@@ -5,19 +5,21 @@ package main
 */
 
 import (
-	"bufio"
 	"fmt"
-	"github.com/eavesmy/mongo_monitor/lib/task"
+	"github.com/eavesmy/mongo_monitor/lib/db"
+	"github.com/eavesmy/mongo_monitor/lib/socket"
 	"net"
 	"net/url"
 	"os"
-	"time"
 )
 
 const SOCKET_FILE = "/tmp/mongo_watch"
 
 var MONGOURI = "mongodb://10.40.126.223:27017/test?compressors=disabled&gssapiServiceName=mongodb"
-var Task = task.NewTask(MONGOURI)
+
+// var Task = task.NewTask(MONGOURI)
+
+// 启动 Unix Socket 服务。 其他服务向该服务请求订阅信息，将收到的订阅信息发送至订阅方。
 
 func main() {
 
@@ -34,6 +36,8 @@ func main() {
 		panic("Invalid mongo uri.")
 	}
 
+	db.URI = MONGOURI
+
 	l, err := net.Listen("unix", SOCKET_FILE)
 	if err != nil {
 		panic(err)
@@ -41,29 +45,13 @@ func main() {
 
 	fmt.Println("Mongo watch start at", l.Addr())
 
-	Task.Sub()
-
 	for {
 		conn, err := l.Accept()
 		if err != nil {
 			continue
 		}
 
-		go readSocket(conn)
-	}
-}
-
-func readSocket(conn net.Conn) {
-	reader := bufio.NewReader(conn)
-
-	for {
-		b, err := reader.ReadBytes('\n')
-		if err != nil {
-			fmt.Println("connect error ", err)
-			time.Sleep(5 * time.Second)
-			continue
-		}
-
-		fmt.Println(b)
+		socket := &socket.Socket{Conn: conn}
+		go socket.Listen()
 	}
 }
