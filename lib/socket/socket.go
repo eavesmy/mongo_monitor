@@ -13,6 +13,7 @@ type Socket struct {
 	Conn       net.Conn
 	Subscribes map[string]*task.Subscribe
 	WaitTime   int
+	DisConnect bool
 }
 
 func (s *Socket) Listen() {
@@ -22,6 +23,11 @@ func (s *Socket) Listen() {
 		b, err := reader.ReadBytes('\n')
 
 		if err != nil {
+
+			if s.DisConnect {
+				return
+			}
+
 			fmt.Println("connect error ", err)
 			time.Sleep(5 * time.Second)
 			s.WaitTime++
@@ -62,5 +68,6 @@ func (s *Socket) Listen() {
 
 func (s *Socket) Destory() {
 	s.Conn.Close()
+	s.DisConnect = true
 	fmt.Println("destory connection")
 }
