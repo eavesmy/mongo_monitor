@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"fmt"
 	"net"
 	// "github.com/eavesmy/golang-lib/crypto"
 	"encoding/json"
@@ -21,25 +22,28 @@ type Subscribe struct {
 }
 
 type SubscribeReq struct {
-	DB         string `json:"db"`
-	Collection string `json:"collection"`
-	Match      bson.D `json:"match"`
-
-	// match := bson.D{{"operationType", "update"}, {"updateDescription.updatedFields.cash", bson.D{{"$exists", true}}}}
+	DB         string      `json:"db"`
+	Collection string      `json:"collection"`
+	Match      interface{} `json:"match"`
 }
 
 func NewSub(req *SubscribeReq) *Subscribe {
 	// 获取 db
 
-	_db := db.Register(req.DB, req.Collection)
-
 	ctx, cancel := context.WithCancel(context.Background())
 
+	_db := db.Register(req.DB, req.Collection, ctx)
+
 	sub := &Subscribe{Cancel: cancel, Ctx: ctx}
+
+	fmt.Println(req.Match)
+
+	// match := bson.D{{"operationType", "update"}, {"updateDescription.updatedFields.cash", bson.D{{"$exists", true}}}}
 
 	stream, err := _db.Watch(ctx, mongo.Pipeline{bson.D{{"$match", req.Match}}}, options.ChangeStream().SetFullDocument(options.UpdateLookup))
 
 	if err != nil {
+		fmt.Println(err)
 		return nil
 	}
 
@@ -49,44 +53,15 @@ func NewSub(req *SubscribeReq) *Subscribe {
 }
 
 func (s *Subscribe) Listen() {
-	for s.Stream.Next(context.Background()) {
+
+	for s.Stream.Next(s.Ctx) {
+
 		// 直接返回结果，交给 对应 task 处理
 		b, _ := bson.Marshal(s.Stream.Current)
 		m := map[string]interface{}{}
 		bson.Unmarshal(b, &m)
 		r, _ := json.Marshal(m)
+
 		s.Conn.Write(r)
 	}
 }
-
-/*
-// 传入参数
-func (t *Task) Sub(req *SubscribeReq) {
-
-	ctx, cancel := context.WithCancel(context.Background())
-	sub := &Subscribe{Cancel: cancel, Name: "test"}
-
-	t.Subscribe[sub.Name] = sub
-
-	// opts := options.ChangeStream().SetMaxAwaitTime(2 * time.Second)
-
-	if err := t.db.Connect(ctx); err != nil {
-		panic(err)
-	}
-
-	stream, err := t.db.Database("test").Collection("a").Watch(context.Background(), mongo.Pipeline{bson.D{{"$match", req.Match}}}, options.ChangeStream().SetFullDocument(options.UpdateLookup))
-
-	if err != nil {
-		panic(err)
-	}
-
-	sub.Stream = *stream
-
-	go sub.Listen()
-}
-
-func (t *Task) UnSub() {
-
-}
-
-*/

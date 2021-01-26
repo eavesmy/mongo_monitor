@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/eavesmy/mongo_monitor/lib/db"
 	"github.com/eavesmy/mongo_monitor/lib/socket"
+	"github.com/eavesmy/mongo_monitor/lib/task"
 	"net"
 	"net/url"
 	"os"
@@ -15,9 +16,7 @@ import (
 
 const SOCKET_FILE = "/tmp/mongo_watch"
 
-var MONGOURI = "mongodb://10.40.126.223:27017/test?compressors=disabled&gssapiServiceName=mongodb"
-
-// var Task = task.NewTask(MONGOURI)
+var MONGOURI = "mongodb://127.0.0.1:27017"
 
 // 启动 Unix Socket 服务。 其他服务向该服务请求订阅信息，将收到的订阅信息发送至订阅方。
 
@@ -51,7 +50,7 @@ func main() {
 			continue
 		}
 
-		socket := &socket.Socket{Conn: conn}
+		socket := &socket.Socket{Conn: conn, Subscribes: map[string]*task.Subscribe{}}
 		go socket.Listen()
 	}
 }

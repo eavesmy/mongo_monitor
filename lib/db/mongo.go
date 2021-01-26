@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	// "go.mongodb.org/mongo-driver/mongo/readpref"
@@ -25,17 +26,17 @@ func InitDB() *mongo.Client {
 	return client
 }
 
-func Register(dbname, collectionname string) *mongo.Collection {
+func Register(dbname, collectionname string, ctx context.Context) *mongo.Collection {
 
 	_name := dbname + "." + collectionname
 
-	if Collections != nil {
+	if Collections[_name] != nil {
 		return Collections[_name]
 	}
 
 	client, err := mongo.NewClient(options.Client().ApplyURI(URI))
 
-	if err != nil {
+	if err != nil || client.Connect(ctx) != nil {
 		panic(err)
 	}
 
